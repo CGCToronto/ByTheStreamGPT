@@ -34,11 +34,18 @@ ENV/
 # Project specific
 fine_tuning/results/
 fine_tuning/fine_tuned_model/
+fine_tuning/output/
+fine_tuning/models/
+fine_tuning/data/
 *.log
 *.pt
 *.pth
 *.bin
 *.safetensors
+*.csv
+*.json
+!fine_tuning/data/training_data.csv
+!fine_tuning/training_metrics.json
 
 # Hugging Face
 .huggingface/
