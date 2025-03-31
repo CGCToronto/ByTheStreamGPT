@@ -1,64 +1,64 @@
-# 溪水旁杂志模型微调项目
+# ByTheStream Magazine Model Fine-tuning Project
 
-## 项目概述
-本项目使用DeepSeek-R1-Distill-Qwen-1.5B模型，通过LoRA方法对溪水旁杂志内容进行微调，以生成与杂志内容相关的回答。
+## Project Overview
+This project uses the DeepSeek-R1-Distill-Qwen-1.5B model and fine-tunes it using the LoRA method on ByTheStream magazine content to generate relevant responses about the magazine's content.
 
-## 数据准备
+## Data Preparation
 
-### 1. 数据收集
-1. 从溪水旁杂志网站收集文章内容
-2. 将文章保存为JSON格式，包含以下字段：
+### 1. Data Collection
+1. Collect article content from the ByTheStream magazine website
+2. Save articles in JSON format with the following fields:
    ```json
    {
-     "title": "文章标题",
-     "author": "作者",
-     "volume": "期数",
-     "content": "文章内容",
-     "date": "发布日期"
+     "title": "Article Title",
+     "author": "Author",
+     "volume": "Issue Number",
+     "content": "Article Content",
+     "date": "Publication Date"
    }
    ```
 
-### 2. 数据预处理
-1. 运行数据预处理脚本：
+### 2. Data Preprocessing
+1. Run the data preprocessing script:
    ```bash
    python prepare_data.py
    ```
-2. 脚本会：
-   - 清理HTML标签
-   - 标准化文本格式
-   - 生成训练所需的问答对
-   - 创建训练集和验证集
+2. The script will:
+   - Clean HTML tags
+   - Standardize text format
+   - Generate Q&A pairs for training
+   - Create training and validation sets
 
-### 3. 数据格式
-处理后的数据格式如下：
+### 3. Data Format
+The processed data format is as follows:
 ```json
 {
-  "instruction": "请根据溪水旁杂志的内容回答问题。回答要简洁，并注明引用来源。",
-  "input": "问题内容",
-  "output": "根据[Volume X, '标题', 作者]的内容，回答...",
+  "instruction": "Please answer the question based on ByTheStream magazine content. Keep the answer concise and cite the source.",
+  "input": "Question content",
+  "output": "Based on [Volume X, 'Title', Author], the answer is...",
   "history": []
 }
 ```
 
-## 模型训练
+## Model Training
 
-### 1. 环境配置
-1. 安装依赖：
+### 1. Environment Setup
+1. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. 确保GPU环境：
+2. Ensure GPU environment:
    - CUDA 11.8+
    - PyTorch 2.0+
-   - 至少12GB显存
+   - At least 12GB VRAM
 
-### 2. 训练配置
-当前使用的LoRA配置：
+### 2. Training Configuration
+Current LoRA configuration:
 ```python
 lora_config = LoraConfig(
-    r=32,                # LoRA秩
-    lora_alpha=64,       # LoRA alpha值
+    r=32,                # LoRA rank
+    lora_alpha=64,       # LoRA alpha value
     target_modules=[
         "q_proj",
         "k_proj",
@@ -74,20 +74,20 @@ lora_config = LoraConfig(
 )
 ```
 
-### 3. 开始训练
+### 3. Start Training
 ```bash
 python train.py
 ```
 
-## 模型使用
+## Model Usage
 
-### 1. 本地部署
-1. 加载模型和LoRA权重：
+### 1. Local Deployment
+1. Load model and LoRA weights:
    ```python
    from transformers import AutoModelForCausalLM, AutoTokenizer
    from peft import PeftModel
    
-   # 加载基础模型
+   # Load base model
    model = AutoModelForCausalLM.from_pretrained(
        "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
        trust_remote_code=True,
@@ -95,12 +95,12 @@ python train.py
        torch_dtype=torch.float16
    )
    
-   # 加载LoRA权重
+   # Load LoRA weights
    model = PeftModel.from_pretrained(model, "./fine_tuned_model")
    tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", trust_remote_code=True)
    ```
 
-2. 生成回答：
+2. Generate responses:
    ```python
    def generate_response(prompt, model, tokenizer):
        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -118,37 +118,37 @@ python train.py
        return response
    ```
 
-### 2. 使用示例
+### 2. Usage Example
 ```python
-# 测试问题
+# Test questions
 test_questions = [
-    "杨磊在溪水旁杂志上发表过哪些文章？",
-    "黄志琦牧师在溪水旁杂志上发表过哪些文章？",
-    "溪水旁杂志的创刊历史是怎样的？"
+    "What articles has Yang Lei published in ByTheStream magazine?",
+    "What articles has Pastor Huang Zhiqi published in ByTheStream magazine?",
+    "What is the history of ByTheStream magazine's founding?"
 ]
 
-# 生成回答
+# Generate responses
 for question in test_questions:
-    prompt = f"<think>请根据溪水旁杂志的内容回答问题。回答要简洁，并注明引用来源。</think>\n\n问题：{question}\n\n回答："
+    prompt = f"<think>Please answer the question based on ByTheStream magazine content. Keep the answer concise and cite the source.</think>\n\nQuestion: {question}\n\nAnswer:"
     response = generate_response(prompt, model, tokenizer)
-    print(f"问题：{question}")
-    print(f"回答：{response}\n")
+    print(f"Question: {question}")
+    print(f"Answer: {response}\n")
 ```
 
-## 注意事项
-1. 确保GPU内存充足（建议至少12GB）
-2. 训练过程中会定期保存检查点
-3. 使用早停机制避免过拟合
-4. 训练完成后会自动保存最佳模型
+## Notes
+1. Ensure sufficient GPU memory (recommended at least 12GB)
+2. Checkpoints are saved periodically during training
+3. Early stopping mechanism is used to prevent overfitting
+4. Best model is automatically saved after training
 
-## 当前状态
-- 训练正在进行中
-- 使用早停机制监控训练进度
-- 每50步保存一次检查点
-- 使用TensorBoard记录训练过程
+## Current Status
+- Training in progress
+- Using early stopping to monitor training progress
+- Saving checkpoints every 50 steps
+- Using TensorBoard to record training process
 
-## 后续计划
-1. 评估模型性能
-2. 优化生成参数
-3. 进行更多测试用例验证
-4. 根据反馈进行模型调整 
+## Future Plans
+1. Evaluate model performance
+2. Optimize generation parameters
+3. Conduct more test case validation
+4. Adjust model based on feedback 
