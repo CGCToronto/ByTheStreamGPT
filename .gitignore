@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -23,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+env/
 ENV/
 
 # IDE
@@ -31,15 +31,19 @@ ENV/
 *.swp
 *.swo
 
-# Model files
-models/
-*.bin
+# Project specific
+fine_tuning/results/
+fine_tuning/fine_tuned_model/
+*.log
 *.pt
 *.pth
+*.bin
+*.safetensors
 
-# Logs
-*.log
+# Hugging Face
+.huggingface/
+wandb/
 
-# Environment variables
-.env
-.env.local 
+# OS
+.DS_Store
+Thumbs.db 
