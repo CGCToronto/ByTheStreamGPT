@@ -102,7 +102,7 @@ def setup_lora():
 def prepare_dataset(tokenizer):
     print("正在准备数据集...")
     # 加载数据集
-    dataset = load_dataset("csv", data_files="data/training_data.csv")
+    dataset = load_dataset("csv", data_files="ByTheStreamGPT/fine_tuning/data/training_data.csv")
     
     def tokenize_function(examples):
         # 解析JSON格式的对话
@@ -110,15 +110,21 @@ def prepare_dataset(tokenizer):
         for text in examples["text"]:
             try:
                 conversation = json.loads(text)
-                # 只使用用户问题和助手回答
+                # 获取更多上下文信息
+                article_info = conversation[0]["content"]  # 文章信息
                 user_question = conversation[1]["content"]
                 assistant_answer = conversation[2]["content"]
-                # 构建输入文本，添加更明确的格式要求
+                
+                # 构建更详细的输入文本
                 formatted_text = f"""<think>请基于溪水旁杂志的内容回答问题。要求：
-1. 回答要简洁精炼，突出要点
-2. 如果引用杂志内容，使用格式：[Volume X, "标题", 作者]
-3. 限制回答长度在200字以内
-4. 避免重复和冗余表达
+1. 回答要深入且专业，体现神学深度
+2. 准确引用杂志内容，使用格式：[Volume X, "标题", 作者]
+3. 回答要结构清晰，层次分明
+4. 对于神学问题，需要从圣经、教义和牧养实践三个层面回答
+5. 对于杂志主题，需要准确识别并回应文章的核心观点
+6. 回答要体现对杂志整体风格和主题的把握
+
+文章信息：{article_info}
 
 问题：{user_question}
 
@@ -133,7 +139,7 @@ def prepare_dataset(tokenizer):
             texts,
             padding="max_length",
             truncation=True,
-            max_length=512,
+            max_length=1024,  # 增加最大长度以容纳更多上下文
             return_tensors="pt"
         )
         
@@ -146,9 +152,9 @@ def prepare_dataset(tokenizer):
     tokenized_dataset = dataset.map(
         tokenize_function,
         batched=True,
-        batch_size=32,  # 增加批处理大小
+        batch_size=16,  # 减小批处理大小以适应更长的序列
         remove_columns=dataset["train"].column_names,
-        num_proc=4,  # 使用多进程处理
+        num_proc=8,  # 增加进程数
         desc="处理数据集"
     )
     
@@ -196,8 +202,8 @@ def train():
     # 配置LoRA
     print("正在配置LoRA...")
     lora_config = LoraConfig(
-        r=32,                # 增加LoRA秩
-        lora_alpha=64,       # 增加alpha值
+        r=128,               # 增加LoRA秩以提升模型容量
+        lora_alpha=256,      # 增加alpha值以增强学习能力
         target_modules=[
             "q_proj",
             "k_proj",
@@ -205,9 +211,9 @@ def train():
             "o_proj",
             "gate_proj",
             "up_proj",
-            "down_proj",
+            "down_proj"
         ],
-        lora_dropout=0.1,    # 增加dropout以减少过拟合
+        lora_dropout=0.15,   # 增加dropout以防止过拟合
         bias="none",
         task_type="CAUSAL_LM"
     )
@@ -231,32 +237,33 @@ def train():
     # 训练参数
     training_args = TrainingArguments(
         output_dir="./results",
-        num_train_epochs=15,             # 增加训练轮次
-        per_device_train_batch_size=4,   # 增加批次大小
-        gradient_accumulation_steps=4,    # 减少梯度累积步数
-        learning_rate=2e-5,              # 降低学习率
-        weight_decay=0.05,               # 增加权重衰减
-        logging_steps=10,
+        num_train_epochs=15,              # 增加训练轮数
+        per_device_train_batch_size=8,    # 减小批次大小以适应更长的序列
+        gradient_accumulation_steps=2,     # 增加梯度累积步数
+        learning_rate=2e-5,               # 降低学习率以获得更稳定的训练
+        weight_decay=0.1,                 # 增加权重衰减以防止过拟合
+        logging_steps=5,                  # 更频繁的日志记录
         save_strategy="steps",
-        save_steps=50,
-        warmup_steps=50,                 # 减少预热步数
-        max_grad_norm=0.5,               # 降低梯度裁剪阈值
-        lr_scheduler_type="cosine_with_restarts",  # 使用余弦退火with restarts
+        save_steps=50,                    # 更频繁的模型保存
+        warmup_steps=100,                 # 增加预热步数
+        max_grad_norm=0.8,                # 降低梯度裁剪阈值以获得更稳定的训练
+        lr_scheduler_type="cosine_with_restarts",
         report_to=["tensorboard"],
-        evaluation_strategy="steps",      # 添加评估策略
-        eval_steps=50,                    # 评估步数
-        metric_for_best_model="loss",     # 使用loss作为最佳模型指标
-        load_best_model_at_end=True,      # 在训练结束时加载最佳模型
-        greater_is_better=False,          # loss越小越好
-        bf16=True,                        # 使用bfloat16而不是fp16
-        optim="adamw_torch",              # 使用AdamW优化器
+        evaluation_strategy="steps",
+        eval_steps=50,                    # 更频繁的评估
+        metric_for_best_model="loss",
+        load_best_model_at_end=True,
+        greater_is_better=False,
+        fp16=True,
+        optim="adamw_torch",
         ddp_find_unused_parameters=False,
-        gradient_checkpointing=True,      # 启用梯度检查点以节省显存
-        group_by_length=True,             # 按长度分组以提高效率
-        dataloader_num_workers=4,         # 增加数据加载器的工作进程数
-        dataloader_pin_memory=True,       # 启用内存固定
-        remove_unused_columns=False,      # 防止自动移除未使用的列
-        label_names=["input_ids", "attention_mask", "labels"],  # 明确指定标签名称
+        gradient_checkpointing=True,
+        group_by_length=True,
+        dataloader_num_workers=8,
+        dataloader_pin_memory=True,
+        remove_unused_columns=False,
+        label_names=["input_ids", "attention_mask", "labels"],
+        gradient_checkpointing_kwargs={"use_reentrant": False}
     )
     
     # 确保模型参数可训练
