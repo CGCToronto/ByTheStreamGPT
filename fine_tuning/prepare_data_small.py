@@ -610,7 +610,7 @@ def explain_sentence(sentence, content):
     return explanation
 
 def prepare_training_data():
-    """准备训练数据"""
+    """准备训练数据，只处理前20卷"""
     training_data = []
     content_dir = Path("../../ByTheStreamWebsite/public/content")
     error_log = []
@@ -618,8 +618,15 @@ def prepare_training_data():
     # 创建输出目录
     os.makedirs("data", exist_ok=True)
     
-    # 遍历所有期数目录
-    for volume_dir in tqdm(list(content_dir.glob("volume_*")), desc="处理期数"):
+    # 获取所有期数目录并排序
+    volume_dirs = sorted(list(content_dir.glob("volume_*")), 
+                        key=lambda x: int(x.name.split('_')[1]) if x.name.split('_')[1].isdigit() else float('inf'))
+    
+    # 只处理前20卷
+    volume_dirs = volume_dirs[:20]
+    
+    # 遍历前20期数目录
+    for volume_dir in tqdm(volume_dirs, desc="处理期数"):
         try:
             # 遍历该期数下的所有文章
             for article_file in tqdm(list(volume_dir.glob("*_s.json")), desc=f"处理{volume_dir.name}的文章"):
@@ -654,14 +661,14 @@ def prepare_training_data():
     
     # 保存训练数据
     try:
-        output_file = "data/training_data.json"
+        output_file = "data/training_data_small.json"
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(training_data, f, ensure_ascii=False, indent=2)
         print(f"\n成功生成 {len(training_data)} 条训练数据，已保存到 {output_file}")
         
         # 保存错误日志
         if error_log:
-            error_file = "data/error_log.json"
+            error_file = "data/error_log_small.json"
             with open(error_file, "w", encoding="utf-8") as f:
                 json.dump(error_log, f, ensure_ascii=False, indent=2)
             print(f"处理过程中出现 {len(error_log)} 个错误，详情请查看 {error_file}")
@@ -669,7 +676,7 @@ def prepare_training_data():
     except Exception as e:
         print(f"保存数据时出错: {str(e)}")
         error_log.append({
-            "file": "training_data.json",
+            "file": "training_data_small.json",
             "error": str(e),
             "type": "data_saving"
         })
@@ -700,62 +707,10 @@ if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     
     # 准备训练数据
-    training_data = []
-    error_log = []
-    content_dir = Path("../../ByTheStreamWebsite/public/content")
+    training_data, error_log = prepare_training_data()
     
-    # 遍历所有期数目录
-    for volume_dir in tqdm(list(content_dir.glob("volume_*")), desc="处理期数"):
-        try:
-            # 遍历该期数下的所有文章
-            for article_file in tqdm(list(volume_dir.glob("*_s.json")), desc=f"处理{volume_dir.name}的文章"):
-                try:
-                    with open(article_file, "r", encoding="utf-8") as f:
-                        article_data = json.load(f)
-                    
-                    # 处理文章
-                    article_training_data = process_article(article_data)
-                    if article_training_data:
-                        training_data.extend(article_training_data)
-                        print(f"成功处理文章: {article_data.get('title', '未知标题')}")
-                        print(f"生成 {len(article_training_data)} 条训练数据")
-                    
-                except Exception as e:
-                    error_msg = f"处理文件 {article_file} 时出错: {str(e)}"
-                    print(error_msg)
-                    error_log.append({
-                        "file": str(article_file),
-                        "error": str(e),
-                        "type": "article_processing"
-                    })
-        
-        except Exception as e:
-            error_msg = f"处理期数 {volume_dir} 时出错: {str(e)}"
-            print(error_msg)
-            error_log.append({
-                "file": str(volume_dir),
-                "error": str(e),
-                "type": "volume_processing"
-            })
-    
-    # 保存训练数据
-    try:
-        output_file = "data/training_data.json"
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(training_data, f, ensure_ascii=False, indent=2)
-        print(f"\n成功生成 {len(training_data)} 条训练数据，已保存到 {output_file}")
-        
-        # 保存错误日志
-        if error_log:
-            error_file = "data/error_log.json"
-            with open(error_file, "w", encoding="utf-8") as f:
-                json.dump(error_log, f, ensure_ascii=False, indent=2)
-            print(f"处理过程中出现 {len(error_log)} 个错误，详情请查看 {error_file}")
-        
-    except Exception as e:
-        print(f"保存数据时出错: {str(e)}")
-        error_log.append({
-            "file": "training_data.json",
-            "error": str(e),
-            "type": "data_saving"
-        }) 
+    # 打印统计信息
+    print(f"\n处理完成，共生成 {len(training_data)} 条训练数据")
+    print(f"数据已保存到 data/training_data_small.json")
+    if error_log:
+        print(f"处理过程中出现 {len(error_log)} 个错误，详情请查看 data/error_log_small.json") 

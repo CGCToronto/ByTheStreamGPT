@@ -26,7 +26,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('training.log', encoding='utf-8'),
+        logging.FileHandler('training_small.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -96,80 +96,7 @@ os.environ['HF_HOME'] = str(cache_dir)
 os.environ['TRANSFORMERS_CACHE'] = str(cache_dir)
 os.environ['HF_DATASETS_CACHE'] = str(cache_dir)
 
-def prepare_training_samples(articles_data):
-    """准备训练样本"""
-    if isinstance(articles_data, list):
-        # 如果数据已经是训练样本格式，直接返回
-        return articles_data
-    
-    # 如果是旧格式，进行转换
-    training_samples = []
-    
-    # 处理新的问答格式
-    if isinstance(articles_data, dict) and "question" in articles_data and "answer" in articles_data:
-        # 单个问答对
-        training_samples.append({
-            "text": f"""问题：{articles_data["question"]}
-
-回答：{json.dumps(articles_data["answer"], ensure_ascii=False, indent=2)}"""
-        })
-    elif isinstance(articles_data, list) and len(articles_data) > 0 and "question" in articles_data[0]:
-        # 问答对列表
-        for qa_pair in articles_data:
-            training_samples.append({
-                "text": f"""问题：{qa_pair["question"]}
-
-回答：{json.dumps(qa_pair["answer"], ensure_ascii=False, indent=2)}"""
-            })
-    else:
-        # 旧的文章格式
-        for article in articles_data:
-            # 基本信息
-            title = article['title']
-            author = article.get('author', '')
-            volume = article.get('volume', '')
-            content = article.get('content', '')
-            key_paragraphs = article.get('key_paragraphs', [])
-            
-            # 生成问题和回答
-            # 1. 文章基本信息查询
-            training_samples.append({
-                "text": f"""问题：《{title}》是哪一期的文章？作者是谁？
-
-回答：
-文章标题：《{title}》
-作者信息：{author}
-期刊信息：第{volume}期"""
-            })
-            
-            # 2. 文章内容查询
-            if content:
-                training_samples.append({
-                    "text": f"""问题：《{title}》的主要内容是什么？
-
-回答：
-文章标题：《{title}》
-作者信息：{author}
-期刊信息：第{volume}期
-具体解答：{content[:500]}"""  # 限制内容长度
-                })
-            
-            # 3. 具体段落解释
-            for para in key_paragraphs:
-                if len(para) > 50:  # 只对较长的段落生成问题
-                    training_samples.append({
-                        "text": f"""问题：《{title}》中这段话是什么意思："{para[:100]}..."？
-
-回答：
-文章标题：《{title}》
-作者信息：{author}
-期刊信息：第{volume}期
-具体解答：这段话出现在文章的关键段落中。{para}"""
-                    })
-    
-    return training_samples
-
-def prepare_dataset(tokenizer, data_path='data/training_data.json'):
+def prepare_dataset(tokenizer, data_path='data/training_data_small.json'):
     """准备训练数据集"""
     # 读取处理后的文章数据
     logging.info(f"正在加载训练数据: {data_path}")
@@ -286,7 +213,7 @@ def train():
     logging.info(f"LoRA模型大小: {trainable_params * 2 / (1024**3):.2f} GB (FP16)")
     
     # 准备数据集
-    data_path = "data/training_data.json"
+    data_path = "data/training_data_small.json"
     tokenized_dataset = prepare_dataset(tokenizer, data_path)
     
     # 打印数据集统计
@@ -300,21 +227,21 @@ def train():
     logging.info(f"训练集占比: {train_size/total_size*100:.2f}%")
     logging.info(f"验证集占比: {val_size/total_size*100:.2f}%")
     
-    # 设置训练参数
+    # 设置训练参数 - 针对小数据集优化
     training_args = TrainingArguments(
-        output_dir="./results",
-        num_train_epochs=2,
-        per_device_train_batch_size=4,
-        per_device_eval_batch_size=4,
-        gradient_accumulation_steps=8,
+        output_dir="./results_small",
+        num_train_epochs=3,  # 增加训练轮数，因为数据集较小
+        per_device_train_batch_size=8,  # 增加批次大小，因为数据集较小
+        per_device_eval_batch_size=8,
+        gradient_accumulation_steps=4,  # 减少梯度累积步数
         evaluation_strategy="steps",
-        eval_steps=200,
+        eval_steps=100,  # 更频繁地评估
         save_strategy="steps",
-        save_steps=200,
-        learning_rate=2e-4,
+        save_steps=100,
+        learning_rate=5e-4,  # 略微提高学习率
         weight_decay=0.01,
-        warmup_steps=100,
-        logging_steps=50,
+        warmup_steps=50,  # 减少预热步数
+        logging_steps=20,  # 更频繁地记录日志
         load_best_model_at_end=True,
         report_to="wandb",
         fp16=True,
