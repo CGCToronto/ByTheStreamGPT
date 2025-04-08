@@ -3,6 +3,110 @@
 ## Project Overview
 This project uses the DeepSeek-R1-Distill-Qwen-1.5B model and fine-tunes it using the LoRA method on ByTheStream magazine content to generate relevant responses about the magazine's content.
 
+## System Design
+
+### Standard vs. Optimized Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Standard Training Pipeline                   │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Full Data  │────▶│ prepare_data│────▶│  train.py   │────▶│  Full Model │
+│  (All Vol.) │     │             │     │             │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                    
+┌─────────────────────────────────────────────────────────────────┐
+│                    Optimized Training Pipeline                   │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Reduced    │────▶│ prepare_data│────▶│ train_small │────▶│  Optimized  │
+│  Data Set   │     │ _small.py   │     │    .py      │     │   Model     │
+│ (10 Vol.)   │     │             │     │             │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+### Data Preparation Optimization
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Data Preparation Pipeline                    │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Raw Article│────▶│  Data Filter│────▶│  Data Aug.  │────▶│  Training   │
+│   Content   │     │ (10 Volumes)│     │  Techniques │     │   Samples   │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                    
+┌─────────────────────────────────────────────────────────────────┐
+│                     Data Augmentation Techniques                 │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Synonym    │     │  Sentence   │     │  Context    │
+│ Replacement │     │  Transform  │     │  Expansion  │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
+### Training Optimization
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Training Optimization                        │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Base Model │────▶│  Layer Freeze│────▶│  LoRA Config│────▶│  Training   │
+│             │     │              │     │             │     │  Process    │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                    
+┌─────────────────────────────────────────────────────────────────┐
+│                     Layer Freezing Strategy                      │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Frozen     │     │  Partially  │     │  Unfrozen   │
+│  Layers     │     │  Frozen     │     │  Layers     │
+│  (1-22)     │     │  (23-27)    │     │  (LoRA)     │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                                                    
+┌─────────────────────────────────────────────────────────────────┐
+│                     LoRA Configuration                           │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Reduced    │     │  Adjusted   │     │  Reduced    │     │  Increased  │
+│  Rank (16)  │     │  Alpha (32) │     │  Target     │     │  Dropout    │
+│             │     │             │     │  Modules    │     │  (0.1)      │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+### Memory and Performance Optimization
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Performance Optimization                      │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Gradient   │     │  Mixed      │     │  Parallel   │     │  Early      │
+│  Checkpoint │     │  Precision  │     │  Processing │     │  Stopping   │
+│             │     │  (FP16)     │     │             │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                    
+┌─────────────────────────────────────────────────────────────────┐
+│                     Memory Usage Reduction                       │
+└─────────────────────────────────────────────────────────────────┘
+                                                                    
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Reduced    │     │  Optimized  │     │  Efficient  │
+│  Parameters │     │  Batch Size │     │  Data Load  │
+│  (0.12%)    │     │  (8)        │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
 ## Data Preparation
 
 ### 1. Data Collection
@@ -31,24 +135,62 @@ This script:
 - Generates Q&A pairs for training
 - Creates training and validation sets
 
-#### Optimized Data Preparation
+#### Optimized Data Preparation (prepare_data_small.py)
 ```bash
 python prepare_data_small.py
 ```
-This optimized script:
-- Processes only the first 10 volumes of content (reducing data size by ~50%)
-- Implements advanced data augmentation techniques:
-  - Synonym replacement with protected keywords
-  - Sentence structure transformation
-  - Context expansion
-- Extracts key points more efficiently:
-  - Uses improved keyword extraction algorithms
-  - Implements better sentence scoring mechanisms
-  - Focuses on core spiritual teachings
-- Generates more focused training samples:
-  - Creates targeted questions based on article content
-  - Provides structured answers with article metadata
-  - Balances question types for better model learning
+
+##### Key Features and Optimizations:
+
+1. **Data Volume Reduction**
+   - Processes only the first 10 volumes (reducing data size by ~50%)
+   - Reason: Focus on core content while maintaining quality
+   - Benefit: Faster training and reduced memory requirements
+
+2. **Advanced Data Augmentation**
+   - Synonym replacement with protected keywords
+     - Preserves spiritual terms while enhancing vocabulary
+     - Uses custom synonym dictionary for domain-specific terms
+   - Sentence structure transformation
+     - Converts statements to questions
+     - Adds modifiers for context variation
+   - Context expansion
+     - Adds spiritual background information
+     - Includes explanatory content
+   - Benefit: Increases training data diversity without manual effort
+
+3. **Intelligent Key Point Extraction**
+   - Improved keyword extraction using TF-IDF and TextRank
+     - Combines multiple algorithms for better accuracy
+     - Filters out stopwords and common terms
+   - Enhanced sentence scoring mechanism
+     - Considers sentence length, position, and content
+     - Weights spiritual terms higher
+   - Core teaching focus
+     - Prioritizes paragraphs with spiritual content
+     - Maintains theological accuracy
+   - Benefit: Better quality training samples
+
+4. **Structured Training Data Generation**
+   - Creates targeted questions based on content
+     - Generates multiple question types
+     - Maintains context relevance
+   - Provides structured answers
+     - Includes article metadata
+     - Organizes content hierarchically
+   - Balances question types
+     - Mixes different question formats
+     - Ensures comprehensive coverage
+   - Benefit: More effective model training
+
+5. **Error Handling and Logging**
+   - Comprehensive error tracking
+     - Logs processing errors by file
+     - Maintains error statistics
+   - Data validation
+     - Ensures data integrity
+     - Handles missing or malformed content
+   - Benefit: Reliable data processing
 
 ### 3. Data Format
 The processed data format is as follows:
@@ -263,9 +405,3 @@ for question in test_questions:
 2. Early stopping mechanism prevents overfitting
 3. Checkpoints are saved every 50 steps for better recovery options
 4. Training progress is monitored through detailed logging
-
-## Future Plans
-1. Further optimize data preparation for even faster training
-2. Experiment with different LoRA configurations
-3. Implement knowledge distillation for model compression
-4. Develop evaluation metrics specific to ByTheStream content 
