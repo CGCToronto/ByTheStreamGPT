@@ -610,7 +610,7 @@ def explain_sentence(sentence, content):
     return explanation
 
 def prepare_training_data():
-    """准备训练数据，只处理前20卷"""
+    """准备训练数据，只处理前10卷"""
     training_data = []
     content_dir = Path("../../ByTheStreamWebsite/public/content")
     error_log = []
@@ -623,7 +623,7 @@ def prepare_training_data():
                         key=lambda x: int(x.name.split('_')[1]) if x.name.split('_')[1].isdigit() else float('inf'))
     
     # 只处理前20卷
-    volume_dirs = volume_dirs[:20]
+    volume_dirs = volume_dirs[:10]
     
     # 遍历前20期数目录
     for volume_dir in tqdm(volume_dirs, desc="处理期数"):

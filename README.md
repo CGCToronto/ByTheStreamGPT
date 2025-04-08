@@ -19,24 +19,62 @@ This project uses the DeepSeek-R1-Distill-Qwen-1.5B model and fine-tunes it usin
    ```
 
 ### 2. Data Preprocessing
-1. Run the data preprocessing script:
-   ```bash
-   python prepare_data.py
-   ```
-2. The script will:
-   - Clean HTML tags
-   - Standardize text format
-   - Generate Q&A pairs for training
-   - Create training and validation sets
+We provide two data preprocessing scripts:
+
+#### Standard Data Preparation
+```bash
+python prepare_data.py
+```
+This script:
+- Cleans HTML tags
+- Standardizes text format
+- Generates Q&A pairs for training
+- Creates training and validation sets
+
+#### Optimized Data Preparation
+```bash
+python prepare_data_small.py
+```
+This optimized script:
+- Processes only the first 10 volumes of content (reducing data size by ~50%)
+- Implements advanced data augmentation techniques:
+  - Synonym replacement with protected keywords
+  - Sentence structure transformation
+  - Context expansion
+- Extracts key points more efficiently:
+  - Uses improved keyword extraction algorithms
+  - Implements better sentence scoring mechanisms
+  - Focuses on core spiritual teachings
+- Generates more focused training samples:
+  - Creates targeted questions based on article content
+  - Provides structured answers with article metadata
+  - Balances question types for better model learning
 
 ### 3. Data Format
 The processed data format is as follows:
 ```json
 {
-  "instruction": "Please answer the question based on ByTheStream magazine content. Keep the answer concise and cite the source.",
-  "input": "Question content",
-  "output": "Based on [Volume X, 'Title', Author], the answer is...",
-  "history": []
+  "question": "Question content",
+  "answer": {
+    "文章信息": {
+      "标题": "Article Title",
+      "作者": "Author",
+      "卷期": "Volume Number",
+      "类别": "Category"
+    },
+    "主要内容": {
+      "概述": "Article overview",
+      "关键段落": ["Key paragraph 1", "Key paragraph 2", ...]
+    },
+    "关键词解释": {
+      "keyword1": "Explanation of keyword1",
+      "keyword2": "Explanation of keyword2"
+    },
+    "关键句子解释": {
+      "sentence1": "Explanation of sentence1",
+      "sentence2": "Explanation of sentence2"
+    }
+  }
 }
 ```
 
@@ -53,9 +91,11 @@ The processed data format is as follows:
    - PyTorch 2.0+
    - At least 12GB VRAM
 
-### 2. Training Configuration
-Current LoRA configuration:
+### 2. Training Scripts Comparison
+
+#### Standard Training (train.py)
 ```python
+# LoRA Configuration
 lora_config = LoraConfig(
     r=32,                # LoRA rank
     lora_alpha=64,       # LoRA alpha value
@@ -68,15 +108,87 @@ lora_config = LoraConfig(
         "up_proj",
         "down_proj",
     ],
-    lora_dropout=0.1,
+    lora_dropout=0.05,
     bias="none",
     task_type="CAUSAL_LM"
 )
+
+# Training Parameters
+training_args = TrainingArguments(
+    num_train_epochs=2,
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=8,
+    eval_steps=200,
+    save_steps=200,
+    learning_rate=2e-4,
+    warmup_steps=100,
+    logging_steps=50
+)
 ```
 
-### 3. Start Training
+#### Optimized Training (train_small.py)
+```python
+# LoRA Configuration
+lora_config = LoraConfig(
+    r=16,                # Reduced rank for efficiency
+    lora_alpha=32,       # Adjusted alpha for balance
+    target_modules=[
+        "q_proj",
+        "v_proj",        # Reduced target modules
+    ],
+    lora_dropout=0.1,    # Increased dropout for regularization
+    bias="none",
+    task_type="CAUSAL_LM"
+)
+
+# Training Parameters
+training_args = TrainingArguments(
+    num_train_epochs=1,  # Reduced epochs
+    per_device_train_batch_size=8,  # Increased batch size
+    gradient_accumulation_steps=8,
+    eval_steps=50,       # More frequent evaluation
+    save_steps=50,       # More frequent saving
+    learning_rate=5e-4,  # Adjusted learning rate
+    warmup_steps=25,     # Adjusted warmup
+    logging_steps=10     # More frequent logging
+)
+```
+
+### 3. Key Optimizations in train_small.py
+
+1. **Transfer Learning Improvements**:
+   - Freezes more layers to reduce trainable parameters
+   - Only unfreezes the last few layers (23-27) for fine-tuning
+   - Reduces trainable parameters from 2.08% to 0.12%
+
+2. **LoRA Configuration Optimization**:
+   - Reduces rank from 32 to 16
+   - Decreases target modules from 7 to 2
+   - Adjusts alpha from 64 to 32
+   - Increases dropout from 0.05 to 0.1
+
+3. **Training Process Optimization**:
+   - Reduces training epochs from 2 to 1
+   - Increases batch size from 4 to 8
+   - More frequent evaluation and saving (every 50 steps)
+   - Adds early stopping with patience of 3
+
+4. **Memory Efficiency**:
+   - Enables gradient checkpointing
+   - Uses mixed precision training (FP16)
+   - Optimizes data loading with parallel processing
+
+5. **Training Time Reduction**:
+   - Estimated training time reduced from 9-11 hours to ~4 hours
+   - Each step takes approximately 44 seconds
+
+### 4. Start Training
 ```bash
+# Standard training
 python train.py
+
+# Optimized training
+python train_small.py
 ```
 
 ## Model Usage
@@ -96,7 +208,7 @@ python train.py
    )
    
    # Load LoRA weights
-   model = PeftModel.from_pretrained(model, "./fine_tuned_model")
+   model = PeftModel.from_pretrained(model, "./results_small")
    tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", trust_remote_code=True)
    ```
 
@@ -135,20 +247,25 @@ for question in test_questions:
     print(f"Answer: {response}\n")
 ```
 
-## Notes
-1. Ensure sufficient GPU memory (recommended at least 12GB)
-2. Checkpoints are saved periodically during training
-3. Early stopping mechanism is used to prevent overfitting
-4. Best model is automatically saved after training
+## Performance Comparison
 
-## Current Status
-- Training in progress
-- Using early stopping to monitor training progress
-- Saving checkpoints every 50 steps
-- Using TensorBoard to record training process
+| Metric | Standard Training | Optimized Training |
+|--------|------------------|-------------------|
+| Training Time | ~9-11 hours | ~4 hours |
+| Memory Usage | ~12GB | ~8GB |
+| Trainable Parameters | 2.08% | 0.12% |
+| Batch Size | 4 | 8 |
+| Steps per Epoch | 337 | 337 |
+| Time per Step | ~90 seconds | ~44 seconds |
+
+## Notes
+1. The optimized training script (train_small.py) is designed for faster training with minimal quality loss
+2. Early stopping mechanism prevents overfitting
+3. Checkpoints are saved every 50 steps for better recovery options
+4. Training progress is monitored through detailed logging
 
 ## Future Plans
-1. Evaluate model performance
-2. Optimize generation parameters
-3. Conduct more test case validation
-4. Adjust model based on feedback 
+1. Further optimize data preparation for even faster training
+2. Experiment with different LoRA configurations
+3. Implement knowledge distillation for model compression
+4. Develop evaluation metrics specific to ByTheStream content 

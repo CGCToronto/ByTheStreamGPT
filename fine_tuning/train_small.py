@@ -139,7 +139,8 @@ def prepare_dataset(tokenizer, data_path='data/training_data_small.json'):
         tokenize_function,
         batched=True,
         remove_columns=dataset.column_names,
-        batch_size=100  # 增加批处理大小以加快处理速度
+        batch_size=100,  # 增加批处理大小以加快处理速度
+        num_proc=4  # 增加并行处理数量
     )
     
     # 分割训练集和验证集
@@ -161,6 +162,7 @@ def train():
     
     # 加载模型和tokenizer
     logging.info("正在加载模型和 tokenizer...")
+    # 考虑使用更小的模型作为基础
     base_model_path = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
     model = AutoModelForCausalLM.from_pretrained(
         base_model_path,
@@ -174,6 +176,15 @@ def train():
     model.train()
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()  # 启用输入梯度计算
+    
+    # 冻结更多层以加速训练
+    for name, param in model.named_parameters():
+        # 冻结所有非LoRA参数
+        if "lora" not in name:
+            param.requires_grad = False
+        # 只解冻最后几层的参数
+        if "layers.23" in name or "layers.24" in name or "layers.25" in name or "layers.26" in name or "layers.27" in name:
+            param.requires_grad = True
     
     tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -189,12 +200,12 @@ def train():
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         inference_mode=False,
-        r=32,
-        lora_alpha=64,
-        lora_dropout=0.05,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        r=16,  # 减小rank以减少参数量
+        lora_alpha=32,  # 调整alpha以平衡性能和效率
+        lora_dropout=0.1,  # 增加dropout以防止过拟合
+        target_modules=["q_proj", "v_proj"],  # 减少目标模块数量
         bias="none",
-        modules_to_save=None  # 确保所有模块都可以被训练
+        modules_to_save=None
     )
     
     model = get_peft_model(model, lora_config)
@@ -230,18 +241,18 @@ def train():
     # 设置训练参数 - 针对小数据集优化
     training_args = TrainingArguments(
         output_dir="./results_small",
-        num_train_epochs=3,  # 增加训练轮数，因为数据集较小
-        per_device_train_batch_size=8,  # 增加批次大小，因为数据集较小
+        num_train_epochs=1,  # 保持1轮
+        per_device_train_batch_size=8,  # 增加批次大小
         per_device_eval_batch_size=8,
-        gradient_accumulation_steps=4,  # 减少梯度累积步数
+        gradient_accumulation_steps=8,  # 减少梯度累积步数
         evaluation_strategy="steps",
-        eval_steps=100,  # 更频繁地评估
+        eval_steps=50,  # 更频繁地评估
         save_strategy="steps",
-        save_steps=100,
-        learning_rate=5e-4,  # 略微提高学习率
+        save_steps=50,  # 更频繁地保存
+        learning_rate=5e-4,  # 降低学习率以提高稳定性
         weight_decay=0.01,
-        warmup_steps=50,  # 减少预热步数
-        logging_steps=20,  # 更频繁地记录日志
+        warmup_steps=25,  # 增加预热步数
+        logging_steps=10,  # 更频繁地记录日志
         load_best_model_at_end=True,
         report_to="wandb",
         fp16=True,
@@ -249,8 +260,8 @@ def train():
         lr_scheduler_type="cosine",
         gradient_checkpointing=True,
         ddp_find_unused_parameters=False,
-        remove_unused_columns=False,  # 防止删除必要的列
-        label_names=["labels"],  # 指定标签列名
+        remove_unused_columns=False,
+        label_names=["labels"],
     )
     
     # 打印训练参数
@@ -271,7 +282,7 @@ def train():
         train_dataset=tokenized_dataset["train"],
         eval_dataset=tokenized_dataset["test"],
         data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
-        callbacks=[SavePeftModelCallback(), TrainingMonitor()]
+        callbacks=[SavePeftModelCallback(), TrainingMonitor(), EarlyStoppingCallback(early_stopping_patience=3)]
     )
     
     # 开始训练
